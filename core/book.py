@@ -13,7 +13,7 @@ class Book:
     # --- 3 numeric attributes ---
     year: int        # first publication year
     pages: int       # number of pages
-    rating: float    # average reader rating
+    editions: int    # number of editions published (a popularity measure)
 
     @staticmethod
     def column_names():
@@ -42,5 +42,5 @@ class Book:
             language=data["language"],
             year=int(data["year"]),
             pages=int(data["pages"]),
-            rating=float(data["rating"]),
+            editions=int(data["editions"]),
         )
