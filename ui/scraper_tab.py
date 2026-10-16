@@ -96,3 +96,9 @@ class ScraperTab(QWidget):
         self.progress_bar.setValue(scraped_count)
         self.count_label.setText(
             f"Books scraped: {scraped_count} / {self.target_count}")
+
+    def show_message(self, text):
+        """Show a custom message in the status line (e.g. why scraping ended)."""
+        self.status_label.setText(text)
+
+    
