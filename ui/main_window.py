@@ -1,4 +1,4 @@
-"""Main window: holds the tabs and connects the Scraper tab to the scraper."""
+"""Main window: holds the tabs and connects the tabs to the data."""
 import os
 
 from PyQt5.QtWidgets import QMainWindow, QTabWidget
@@ -6,9 +6,10 @@ from PyQt5.QtWidgets import QMainWindow, QTabWidget
 from core.dataset import Dataset
 from scraper.open_library_source import OpenLibrarySource
 from scraper.scraper_thread import ScraperThread
+from ui.books_tab import BooksTab
 from ui.scraper_tab import IDLE, ScraperTab
 
-TARGET_BOOKS = 15000  # how many books we want to scrape
+TARGET_BOOKS = 15000
 
 # Absolute path to  book_data_explorer/data/books.csv
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -19,13 +20,16 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Book Data Explorer")
-        self.resize(900, 600)
+        self.resize(1100, 650)
 
-        self.dataset = Dataset()     # all scraped books are stored here
+        self.dataset = Dataset()     # all books are stored here
         self._thread = None          # the current scraper thread (if any)
 
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
+
+        self.books_tab = BooksTab()
+        self.tabs.addTab(self.books_tab, "Books")
 
         self.scraper_tab = ScraperTab(target_count=TARGET_BOOKS)
         self.tabs.addTab(self.scraper_tab, "Scraper")
@@ -35,6 +39,15 @@ class MainWindow(QMainWindow):
         self.scraper_tab.pause_requested.connect(self._pause_scraping)
         self.scraper_tab.resume_requested.connect(self._resume_scraping)
         self.scraper_tab.stop_requested.connect(self._stop_scraping)
+
+        self._load_saved_books()
+
+    # ---------- loading saved data ----------
+    def _load_saved_books(self):
+        """At startup, load the CSV from the last scrape (if it exists)."""
+        if os.path.exists(CSV_PATH):
+            self.dataset.load_csv(CSV_PATH)
+            self.books_tab.show_books(self.dataset.get_all())
 
     # ---------- scraper control ----------
     def _start_scraping(self):
@@ -69,6 +82,7 @@ class MainWindow(QMainWindow):
         count = len(self.dataset)
         if count > 0:
             self.dataset.save_csv(CSV_PATH)    # keep whatever was scraped
+            self.books_tab.show_books(self.dataset.get_all())   # refresh table
             message += f". {count} books saved to data/books.csv"
         self.scraper_tab.show_message(message)
 

@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 .venv/
 data/books.csv
+data/books_backup.csv
