@@ -3,9 +3,8 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (QComboBox, QGridLayout, QGroupBox, QHBoxLayout,
                              QLabel, QPushButton, QVBoxLayout)
 
-from algorithms.sorting import ALGORITHMS
-from core.book import Book
 from algorithms.sorting import ALGORITHMS, is_available
+from core.book import Book
 
 RESULT_FIELDS = ["Algorithm", "Time", "Comparisons", "Swaps",
                  "Complexity", "Stability"]
@@ -14,6 +13,7 @@ RESULT_FIELDS = ["Algorithm", "Time", "Comparisons", "Swaps",
 class SortPanel(QGroupBox):
     # Sent when a button is clicked; the Books tab decides what to do.
     sort_requested = pyqtSignal(str, str, bool)   # algorithm, column, descending
+    benchmark_requested = pyqtSignal(str)         # column
     reset_requested = pyqtSignal()
 
     def __init__(self):
@@ -31,12 +31,15 @@ class SortPanel(QGroupBox):
 
         self.order_box = QComboBox()
         self.order_box.addItems(["Ascending", "Descending"])
+
         # Grey out algorithms that cannot sort the selected column
         self.column_box.currentIndexChanged.connect(self._update_available_algorithms)
 
         self.sort_button = QPushButton("Sort")
+        self.benchmark_button = QPushButton("Benchmark")
         self.reset_button = QPushButton("Reset order")
         self.sort_button.clicked.connect(self._on_sort_clicked)
+        self.benchmark_button.clicked.connect(self._on_benchmark_clicked)
         self.reset_button.clicked.connect(self.reset_requested.emit)
 
         controls = QHBoxLayout()
@@ -47,6 +50,7 @@ class SortPanel(QGroupBox):
         controls.addWidget(QLabel("Order:"))
         controls.addWidget(self.order_box)
         controls.addWidget(self.sort_button)
+        controls.addWidget(self.benchmark_button)
         controls.addWidget(self.reset_button)
         controls.addStretch()
 
@@ -70,14 +74,17 @@ class SortPanel(QGroupBox):
         layout.addWidget(self.status_label)
         self.setLayout(layout)
 
-        self._update_available_algorithms()   # apply it for the starting column        
+        self._update_available_algorithms()   # apply it for the starting column
 
-    # ---------- button handler ----------
+    # ---------- button handlers ----------
     def _on_sort_clicked(self):
         self.sort_requested.emit(
             self.algorithm_box.currentText(),
             self.column_box.currentData(),             # e.g. "year"
             self.order_box.currentText() == "Descending")
+
+    def _on_benchmark_clicked(self):
+        self.benchmark_requested.emit(self.column_box.currentData())
 
     def _update_available_algorithms(self):
         """Enable only the algorithms that can sort the selected column."""
@@ -92,9 +99,10 @@ class SortPanel(QGroupBox):
 
     # ---------- called by the Books tab ----------
     def set_busy(self, busy):
-        """Disable the controls while a sort is running."""
+        """Disable the controls while a sort or benchmark is running."""
         for widget in (self.column_box, self.algorithm_box, self.order_box,
-                       self.sort_button, self.reset_button):
+                       self.sort_button, self.benchmark_button,
+                       self.reset_button):
             widget.setEnabled(not busy)
         self.show_status("Sorting... please wait" if busy else "")
 

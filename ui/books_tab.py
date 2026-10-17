@@ -6,6 +6,8 @@ from core.book import Book
 from ui.book_table_model import BookTableModel
 from ui.sort_panel import SortPanel
 from ui.sort_worker import SortThread
+from ui.benchmark_dialog import BenchmarkDialog
+from ui.benchmark_worker import BenchmarkThread
 
 # Starting widths (pixels) for every column EXCEPT the title.
 # The title column has no fixed width: it stretches to fill the window.
@@ -21,10 +23,12 @@ class BooksTab(QWidget):
         self.model = BookTableModel()
         self._books = []        # the ORIGINAL (unsorted) list; sorts always start from it
         self._sort_thread = None
+        self._benchmark_thread = None
 
         self.sort_panel = SortPanel()
         self.sort_panel.sort_requested.connect(self._start_sort)
         self.sort_panel.reset_requested.connect(self._reset_order)
+        self.sort_panel.benchmark_requested.connect(self._start_benchmark)
 
         self.table = self._create_table()
 
@@ -105,7 +109,36 @@ class BooksTab(QWidget):
         self._display(self._books)
         self.sort_panel.clear_result()
 
+    # ---------- benchmark ----------
+    def _start_benchmark(self, column):
+        if not self._books:
+            self.sort_panel.show_status("No books loaded yet.")
+            return
+        self._benchmark_column = column
+        self.sort_panel.set_busy(True)
+        self._benchmark_thread = BenchmarkThread(self._books, column)
+        self._benchmark_thread.progress.connect(self._on_benchmark_progress)
+        self._benchmark_thread.benchmark_finished.connect(self._on_benchmark_finished)
+        self._benchmark_thread.benchmark_failed.connect(self._on_benchmark_failed)
+        self._benchmark_thread.start()
+
+    def _on_benchmark_progress(self, position, total, name):
+        self.sort_panel.show_status(
+            f"Benchmarking: {name} ({position}/{total})... please wait")
+
+    def _on_benchmark_finished(self, results):
+        self.sort_panel.set_busy(False)
+        BenchmarkDialog(self._benchmark_column, len(self._books),
+                        results, self).exec_()
+
+    def _on_benchmark_failed(self, message):
+        self.sort_panel.set_busy(False)
+        self.sort_panel.show_status(f"Benchmark failed: {message}")
+
     def finish_sort(self):
-        """Wait for a running sort to end (called when the window closes)."""
+        """Wait for background work to end (called when the window closes)."""
         if self._sort_thread is not None and self._sort_thread.isRunning():
             self._sort_thread.wait()
+        if self._benchmark_thread is not None and self._benchmark_thread.isRunning():
+            self._benchmark_thread.stop()    # stops after the current algorithm
+            self._benchmark_thread.wait()
