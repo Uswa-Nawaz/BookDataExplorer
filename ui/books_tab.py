@@ -1,12 +1,14 @@
 """Books tab: search bar, sorting controls and the table of books."""
-from PyQt5.QtWidgets import (QAbstractItemView, QHeaderView, QLabel,
+from PyQt5.QtWidgets import (QAbstractItemView, QDialog, QHeaderView, QLabel,
                              QTableView, QVBoxLayout, QWidget)
 
+from algorithms.composite import run_composite_search
 from algorithms.searching import make_condition, run_search
 from core.book import Book
 from ui.benchmark_dialog import BenchmarkDialog
 from ui.benchmark_worker import BenchmarkThread
 from ui.book_table_model import BookTableModel
+from ui.filter_dialog import FilterDialog
 from ui.search_panel import SearchPanel
 from ui.sort_panel import SortPanel
 from ui.sort_worker import SortThread
@@ -38,6 +40,8 @@ class BooksTab(QWidget):
         self.search_panel = SearchPanel()
         self.search_panel.search_requested.connect(self._start_search)
         self.search_panel.clear_requested.connect(self._clear_search)
+        self.search_panel.composite_requested.connect(self._open_composite_filter)
+        self._filter_dialog = FilterDialog(self)
 
         self.sort_panel = SortPanel()
         self.sort_panel.sort_requested.connect(self._start_sort)
@@ -129,6 +133,20 @@ class BooksTab(QWidget):
         self._filtered = None
         self._refresh_table()
         self.search_panel.clear_result()
+
+    def _open_composite_filter(self):
+        """Let the user build an AND/OR/NOT filter, then apply it to ALL books."""
+        if not self._order:
+            self.search_panel.show_status("No books loaded yet.")
+            return
+        if self._filter_dialog.exec_() != QDialog.Accepted:
+            return                                    # cancelled
+        composite = self._filter_dialog.composite
+        result = run_composite_search(self._order, composite)
+        self._filtered = result.matches
+        self._refresh_table()
+        self.search_panel.show_result(result, len(self._order))
+        self.search_panel.show_status(f"Composite filter: {composite.describe()}")
 
     # ---------- which books to sort or benchmark ----------
     def _books_for_scope(self):

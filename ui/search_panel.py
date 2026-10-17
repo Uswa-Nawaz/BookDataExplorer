@@ -13,6 +13,7 @@ class SearchPanel(QGroupBox):
     # Sent when a button is clicked; the Books tab decides what to do.
     search_requested = pyqtSignal(str, str, str, str)   # algorithm, column, operator, text
     clear_requested = pyqtSignal()
+    composite_requested = pyqtSignal()
 
     def __init__(self):
         super().__init__("Search")
@@ -34,6 +35,9 @@ class SearchPanel(QGroupBox):
         self.search_button = QPushButton("Search")
         self.clear_button = QPushButton("Clear search")
 
+        self.composite_button = QPushButton("Composite filter...")
+        self.composite_button.clicked.connect(self.composite_requested.emit)
+
         # The list of filters depends on the column, and the usable
         # algorithms depend on the filter
         self.column_box.currentIndexChanged.connect(self._update_operators)
@@ -52,7 +56,8 @@ class SearchPanel(QGroupBox):
         controls.addWidget(self.algorithm_box)
         controls.addWidget(self.search_button)
         controls.addWidget(self.clear_button)
-
+        controls.addWidget(self.composite_button)
+        
         # --- results: a caption row above a value row ---
         results = QGridLayout()
         self._value_labels = {}
