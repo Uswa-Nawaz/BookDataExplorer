@@ -33,7 +33,45 @@ def make_key(value):
     Numbers are used as they are."""
     return value.lower() if isinstance(value, str) else value
 
+class Descending:
+    """Wraps a key so that it sorts in REVERSE order. It reverses every
+    comparison, so all our comparison-based algorithms work with it unchanged."""
+    __slots__ = ("key",)
 
+    def __init__(self, key):
+        self.key = key
+
+    def __eq__(self, other):
+        return self.key == other.key
+
+    def __lt__(self, other):
+        return self.key > other.key
+
+    def __gt__(self, other):
+        return self.key < other.key
+
+    def __le__(self, other):
+        return self.key >= other.key
+
+    def __ge__(self, other):
+        return self.key <= other.key
+
+
+def make_multi_key(book, levels):
+    """Key for sorting by several columns: a tuple with one part per level.
+    levels = [(column, descending), ...]. Python compares tuples part by part,
+    so the second part only matters when the first parts are equal."""
+    parts = []
+    for column, descending in levels:
+        key = make_key(book.get(column))
+        parts.append(Descending(key) if descending else key)
+    return tuple(parts)
+
+
+def describe_levels(levels):
+    """e.g. 'genre ascending, then year descending'"""
+    return ", then ".join(f"{column} {'descending' if descending else 'ascending'}"
+                          for column, descending in levels)
 # ---------------------------------------------------------------------------
 # The algorithms. Each one sorts `entries` in place (ascending by entry[0])
 # and updates metrics.comparisons / metrics.swaps.
@@ -399,11 +437,29 @@ def run_sort(algorithm_name, books, column, **options):
     # Build (key, book) entries; the caller's list is left untouched
     entries = [(make_key(book.get(column)), book) for book in books]
 
-        # Counting, radix and bucket sort need whole-number keys
+    # Counting, radix and bucket sort need whole-number keys
     if algorithm.numeric_only and not all(isinstance(key, int) for key, _ in entries):
         raise ValueError(f"{algorithm.name} only works on numeric columns "
                          "(year, pages, editions)")
 
+    return _sort_entries(algorithm, entries, options)
+
+
+def run_multi_sort(algorithm_name, books, levels, **options):
+    """Sort `books` by several columns. levels = [(column, descending), ...],
+    most important first. Returns a SortResult."""
+    algorithm = ALGORITHMS[algorithm_name]
+    if not levels:
+        raise ValueError("Choose at least one column to sort by.")
+    if algorithm.numeric_only:
+        raise ValueError(f"{algorithm.name} cannot sort by several columns.")
+
+    entries = [(make_multi_key(book, levels), book) for book in books]
+    return _sort_entries(algorithm, entries, options)
+
+
+def _sort_entries(algorithm, entries, options):
+    """Time the algorithm on the (key, book) entries and pack the result."""
     metrics = Metrics()
     start = time.perf_counter()
     algorithm.function(entries, metrics, **options)      # the actual sorting

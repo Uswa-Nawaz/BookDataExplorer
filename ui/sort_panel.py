@@ -15,6 +15,7 @@ class SortPanel(QGroupBox):
     sort_requested = pyqtSignal(str, str, bool)   # algorithm, column, descending
     benchmark_requested = pyqtSignal(str)         # column
     reset_requested = pyqtSignal()
+    multi_sort_requested = pyqtSignal()
 
     def __init__(self):
         super().__init__("Sorting")
@@ -42,6 +43,10 @@ class SortPanel(QGroupBox):
         self.sort_button = QPushButton("Sort")
         self.benchmark_button = QPushButton("Benchmark")
         self.reset_button = QPushButton("Reset order")
+
+        self.multi_sort_button = QPushButton("Multi-level sort...")
+        self.multi_sort_button.clicked.connect(self.multi_sort_requested.emit)
+
         self.sort_button.clicked.connect(self._on_sort_clicked)
         self.benchmark_button.clicked.connect(self._on_benchmark_clicked)
         self.reset_button.clicked.connect(self.reset_requested.emit)
@@ -60,6 +65,7 @@ class SortPanel(QGroupBox):
         buttons = QHBoxLayout()
         buttons.addWidget(self.sort_button)
         buttons.addWidget(self.benchmark_button)
+        buttons.addWidget(self.multi_sort_button)
         buttons.addWidget(self.reset_button)
         buttons.addStretch()
 
@@ -116,6 +122,7 @@ class SortPanel(QGroupBox):
         """Disable the controls while a sort or benchmark is running."""
         for widget in (self.column_box, self.algorithm_box, self.order_box,
                        self.scope_box, self.sort_button, self.benchmark_button,
+                       self.multi_sort_button,                     # <-- ADD THIS LINE
                        self.reset_button):
             widget.setEnabled(not busy)
         self.show_status("Sorting... please wait" if busy else "")

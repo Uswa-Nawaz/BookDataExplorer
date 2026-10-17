@@ -4,6 +4,8 @@ from PyQt5.QtWidgets import (QAbstractItemView, QDialog, QHeaderView, QLabel,
 
 from algorithms.composite import run_composite_search
 from algorithms.searching import make_condition, run_search
+from algorithms.sorting import ALGORITHMS, describe_levels, is_available, run_multi_sort, run_sort
+from ui.multi_sort_dialog import MultiSortDialog
 from core.book import Book
 from ui.benchmark_dialog import BenchmarkDialog
 from ui.benchmark_worker import BenchmarkThread
@@ -47,6 +49,10 @@ class BooksTab(QWidget):
         self.sort_panel.sort_requested.connect(self._start_sort)
         self.sort_panel.benchmark_requested.connect(self._start_benchmark)
         self.sort_panel.reset_requested.connect(self._reset_order)
+
+        self.sort_panel.multi_sort_requested.connect(self._open_multi_sort)
+        self._multi_sort_dialog = MultiSortDialog(self)    # kept, so rows are remembered
+        self._sort_note = ""                               # extra text shown after a sort
 
         self.table = self._create_table()
 
@@ -171,9 +177,28 @@ class BooksTab(QWidget):
         if books is None:
             return
         self._sort_on_filtered = self.sort_panel.use_filtered_results()
+        self._sort_note = ""
         self.sort_panel.set_busy(True)
         # The sort runs in a helper process so the window stays responsive
-        self._sort_thread = SortThread(algorithm_name, books, column, descending)
+        self._sort_thread = SortThread(run_sort, algorithm_name, books, column,
+                                       descending=descending)
+        self._sort_thread.sort_finished.connect(self._on_sort_finished)
+        self._sort_thread.sort_failed.connect(self._on_sort_failed)
+        self._sort_thread.start()
+
+    def _open_multi_sort(self):
+        """Let the user choose several columns, then sort by all of them."""
+        books = self._books_for_scope()
+        if books is None:
+            return
+        if self._multi_sort_dialog.exec_() != QDialog.Accepted:
+            return                                    # cancelled
+        dialog = self._multi_sort_dialog
+        self._sort_on_filtered = self.sort_panel.use_filtered_results()
+        self._sort_note = f"Multi-level sort: {describe_levels(dialog.levels)}"
+        self.sort_panel.set_busy(True)
+        self._sort_thread = SortThread(run_multi_sort, dialog.algorithm_name,
+                                       books, dialog.levels)
         self._sort_thread.sort_finished.connect(self._on_sort_finished)
         self._sort_thread.sort_failed.connect(self._on_sort_failed)
         self._sort_thread.start()
@@ -188,6 +213,7 @@ class BooksTab(QWidget):
         self._refresh_table()
         self.sort_panel.show_result(result)
         self.sort_panel.set_busy(False)
+        self.sort_panel.show_status(self._sort_note)  # e.g. the levels used
 
     def _on_sort_failed(self, message):
         self.sort_panel.set_busy(False)

@@ -9,18 +9,16 @@ from concurrent.futures import ProcessPoolExecutor
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
-from algorithms.sorting import run_sort
-
 
 class SortThread(QThread):
     sort_finished = pyqtSignal(object)   # carries the SortResult
     sort_failed = pyqtSignal(str)        # carries an error message
 
-    def __init__(self, algorithm_name, books, column, descending):
+    def __init__(self, sort_function, *arguments, descending=False):
+        """sort_function is run_sort or run_multi_sort; arguments are passed to it."""
         super().__init__()
-        self._algorithm_name = algorithm_name
-        self._books = books
-        self._column = column
+        self._sort_function = sort_function
+        self._arguments = arguments
         self._descending = descending
 
     def run(self):
@@ -29,8 +27,7 @@ class SortThread(QThread):
             # Start one helper process, run the sort there, and wait for the
             # result. While waiting, this thread uses no CPU.
             with ProcessPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run_sort, self._algorithm_name,
-                                         self._books, self._column)
+                future = executor.submit(self._sort_function, *self._arguments)
                 result = future.result()
             if self._descending:
                 # Descending = the ascending result reversed. The measured
