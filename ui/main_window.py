@@ -91,4 +91,5 @@ class MainWindow(QMainWindow):
         if self._thread is not None and self._thread.isRunning():
             self._thread.stop()
             self._thread.wait()
+        self.books_tab.finish_sort()
         event.accept()
