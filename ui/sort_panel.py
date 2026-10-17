@@ -1,4 +1,4 @@
-"""Sorting controls (column, algorithm, order) and the results display."""
+"""Sorting controls (column, algorithm, order, scope) and the results display."""
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (QComboBox, QGridLayout, QGroupBox, QHBoxLayout,
                              QLabel, QPushButton, QVBoxLayout)
@@ -21,7 +21,7 @@ class SortPanel(QGroupBox):
         self._build_ui()
 
     def _build_ui(self):
-        # --- controls ---
+        # --- selectors ---
         self.column_box = QComboBox()
         for name in Book.column_names():
             self.column_box.addItem(name.capitalize(), name)   # (shown text, value)
@@ -32,9 +32,13 @@ class SortPanel(QGroupBox):
         self.order_box = QComboBox()
         self.order_box.addItems(["Ascending", "Descending"])
 
+        self.scope_box = QComboBox()                           # what to sort / benchmark
+        self.scope_box.addItems(["Full dataset", "Filtered results"])
+
         # Grey out algorithms that cannot sort the selected column
         self.column_box.currentIndexChanged.connect(self._update_available_algorithms)
 
+        # --- buttons ---
         self.sort_button = QPushButton("Sort")
         self.benchmark_button = QPushButton("Benchmark")
         self.reset_button = QPushButton("Reset order")
@@ -42,17 +46,22 @@ class SortPanel(QGroupBox):
         self.benchmark_button.clicked.connect(self._on_benchmark_clicked)
         self.reset_button.clicked.connect(self.reset_requested.emit)
 
-        controls = QHBoxLayout()
-        controls.addWidget(QLabel("Column:"))
-        controls.addWidget(self.column_box)
-        controls.addWidget(QLabel("Algorithm:"))
-        controls.addWidget(self.algorithm_box)
-        controls.addWidget(QLabel("Order:"))
-        controls.addWidget(self.order_box)
-        controls.addWidget(self.sort_button)
-        controls.addWidget(self.benchmark_button)
-        controls.addWidget(self.reset_button)
-        controls.addStretch()
+        selectors = QHBoxLayout()
+        selectors.addWidget(QLabel("Column:"))
+        selectors.addWidget(self.column_box)
+        selectors.addWidget(QLabel("Algorithm:"))
+        selectors.addWidget(self.algorithm_box)
+        selectors.addWidget(QLabel("Order:"))
+        selectors.addWidget(self.order_box)
+        selectors.addWidget(QLabel("Scope:"))
+        selectors.addWidget(self.scope_box)
+        selectors.addStretch()
+
+        buttons = QHBoxLayout()
+        buttons.addWidget(self.sort_button)
+        buttons.addWidget(self.benchmark_button)
+        buttons.addWidget(self.reset_button)
+        buttons.addStretch()
 
         # --- results: a caption row above a value row ---
         results = QGridLayout()
@@ -69,7 +78,8 @@ class SortPanel(QGroupBox):
         self.status_label = QLabel("")
 
         layout = QVBoxLayout()
-        layout.addLayout(controls)
+        layout.addLayout(selectors)
+        layout.addLayout(buttons)
         layout.addLayout(results)
         layout.addWidget(self.status_label)
         self.setLayout(layout)
@@ -98,10 +108,14 @@ class SortPanel(QGroupBox):
             self.algorithm_box.setCurrentIndex(0)
 
     # ---------- called by the Books tab ----------
+    def use_filtered_results(self):
+        """True if the user chose to sort/benchmark only the filtered results."""
+        return self.scope_box.currentIndex() == 1
+
     def set_busy(self, busy):
         """Disable the controls while a sort or benchmark is running."""
         for widget in (self.column_box, self.algorithm_box, self.order_box,
-                       self.sort_button, self.benchmark_button,
+                       self.scope_box, self.sort_button, self.benchmark_button,
                        self.reset_button):
             widget.setEnabled(not busy)
         self.show_status("Sorting... please wait" if busy else "")

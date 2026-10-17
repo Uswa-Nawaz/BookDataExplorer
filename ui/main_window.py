@@ -20,7 +20,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Book Data Explorer")
-        self.resize(1100, 650)
+        self.resize(1100, 780)
 
         self.dataset = Dataset()     # all books are stored here
         self._thread = None          # the current scraper thread (if any)

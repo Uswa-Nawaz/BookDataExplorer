@@ -159,13 +159,20 @@ class SearchAlgorithm:
     function: object
     complexity: str
     needs_sorted: bool     # must the books be sorted by the searched column?
+    operators: object = None   # operators it supports (None = all of them)
 
 
 SEARCH_ALGORITHMS = {a.name: a for a in [
     SearchAlgorithm("Linear Search", linear_search, "O(n)",     needs_sorted=False),
-    SearchAlgorithm("Binary Search", binary_search, "O(log n)", needs_sorted=True),
+    SearchAlgorithm("Binary Search", binary_search, "O(log n)", needs_sorted=True,
+                    operators=BINARY_OPERATORS),
 ]}
 
+def can_search(algorithm_name, operator):
+    """Can this algorithm handle this operator?
+    (Binary search cannot do 'contains' or 'ends with'.)"""
+    allowed = SEARCH_ALGORITHMS[algorithm_name].operators
+    return allowed is None or operator in allowed
 
 @dataclass
 class SearchResult:
