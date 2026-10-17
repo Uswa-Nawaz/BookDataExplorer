@@ -67,12 +67,17 @@ def selection_sort(entries, metrics):
 
 
 def insertion_sort(entries, metrics):
-    """Take each item and slide it left into its place among the already
-    sorted items before it (like sorting playing cards in your hand)."""
-    for i in range(1, len(entries)):
+    """Insertion sort on the whole list."""
+    _insertion_sort_range(entries, 0, len(entries), metrics)
+
+
+def _insertion_sort_range(entries, low, high, metrics):
+    """Take each item in [low, high) and slide it left into its place among
+    the already sorted items before it (like sorting playing cards)."""
+    for i in range(low + 1, high):
         current = entries[i]
         j = i - 1
-        while j >= 0:
+        while j >= low:
             metrics.comparisons += 1
             if entries[j][0] > current[0]:
                 entries[j + 1] = entries[j]  # shift the bigger item right
@@ -173,6 +178,80 @@ def _partition(entries, low, high, metrics):
         metrics.swaps += 1
     return boundary
 
+# Class definition: stop dividing once a piece has n items or fewer, then
+# sort that small piece with insertion sort. 16 is a common starting value.
+HYBRID_THRESHOLD = 16
+
+
+def hybrid_merge_sort(entries, metrics, n=HYBRID_THRESHOLD):
+    """Merge sort that does not divide down to single elements. Pieces of
+    size n or smaller are sorted with insertion sort instead."""
+    n = max(n, 1)    # n below 1 would divide forever
+    _hybrid_range(entries, 0, len(entries), metrics, n)
+
+
+def _hybrid_range(entries, low, high, metrics, n):
+    if high - low <= n:                       # small piece: insertion sort
+        _insertion_sort_range(entries, low, high, metrics)
+        return
+    middle = (low + high) // 2
+    _hybrid_range(entries, low, middle, metrics, n)
+    _hybrid_range(entries, middle, high, metrics, n)
+    _merge(entries, low, middle, high, metrics)   # same merge as Merge Sort
+
+
+def shell_sort(entries, metrics):
+    """Insertion sort that first compares items far apart (a 'gap'), so items
+    move long distances early. The gap starts at n/2 and halves until it is 1
+    (the last pass is a normal insertion sort on nearly sorted data)."""
+    n = len(entries)
+    gap = n // 2
+    while gap > 0:
+        for i in range(gap, n):
+            current = entries[i]
+            j = i
+            while j >= gap:
+                metrics.comparisons += 1
+                if entries[j - gap][0] > current[0]:
+                    entries[j] = entries[j - gap]   # shift the bigger item
+                    metrics.swaps += 1
+                    j -= gap
+                else:
+                    break
+            entries[j] = current
+        gap //= 2
+
+
+def heap_sort(entries, metrics):
+    """Build a max-heap (largest item at the top), then repeatedly swap the
+    top item to the end of the list and repair the shrinking heap."""
+    n = len(entries)
+    for start in range(n // 2 - 1, -1, -1):          # build the heap
+        _sift_down(entries, start, n, metrics)
+    for end in range(n - 1, 0, -1):                  # extract the largest each time
+        entries[0], entries[end] = entries[end], entries[0]
+        metrics.swaps += 1
+        _sift_down(entries, 0, end, metrics)         # heap is now entries[0:end]
+
+
+def _sift_down(entries, root, size, metrics):
+    """Move entries[root] down until both its children are smaller.
+    The heap occupies entries[0:size]; children of i are 2i+1 and 2i+2."""
+    while True:
+        child = 2 * root + 1
+        if child >= size:                            # no children: done
+            return
+        if child + 1 < size:                         # pick the larger child
+            metrics.comparisons += 1
+            if entries[child + 1][0] > entries[child][0]:
+                child += 1
+        metrics.comparisons += 1
+        if entries[child][0] > entries[root][0]:
+            entries[root], entries[child] = entries[child], entries[root]
+            metrics.swaps += 1
+            root = child
+        else:
+            return
 
 # ---------------------------------------------------------------------------
 # Registry: one place that lists every algorithm and its properties
@@ -186,17 +265,20 @@ class SortAlgorithm:
 
 
 ALGORITHMS = {a.name: a for a in [
-    SortAlgorithm("Bubble Sort",    bubble_sort,    "O(n^2)",     stable=True),
-    SortAlgorithm("Selection Sort", selection_sort, "O(n^2)",     stable=False),
-    SortAlgorithm("Insertion Sort", insertion_sort, "O(n^2)",     stable=True),
-    SortAlgorithm("Merge Sort",     merge_sort,     "O(n log n)", stable=True),
-    SortAlgorithm("Quick Sort",     quick_sort,     "O(n^2)",     stable=False),
+    SortAlgorithm("Bubble Sort",       bubble_sort,       "O(n^2)",     stable=True),
+    SortAlgorithm("Selection Sort",    selection_sort,    "O(n^2)",     stable=False),
+    SortAlgorithm("Insertion Sort",    insertion_sort,    "O(n^2)",     stable=True),
+    SortAlgorithm("Merge Sort",        merge_sort,        "O(n log n)", stable=True),
+    SortAlgorithm("Quick Sort",        quick_sort,        "O(n^2)",     stable=False),
+    SortAlgorithm("Hybrid Merge Sort", hybrid_merge_sort, "O(n log n)", stable=True),
+    SortAlgorithm("Shell Sort",        shell_sort,        "O(n^2)",     stable=False),
+    SortAlgorithm("Heap Sort",         heap_sort,         "O(n log n)", stable=False),
 ]}
 
 # ---------------------------------------------------------------------------
 # The function the rest of the app will call
 # ---------------------------------------------------------------------------
-def run_sort(algorithm_name, books, column):
+def run_sort(algorithm_name, books, column, **options):
     """Sort `books` by `column` with the named algorithm.
     The original list is NOT changed. Returns a SortResult."""
     algorithm = ALGORITHMS[algorithm_name]
@@ -206,7 +288,7 @@ def run_sort(algorithm_name, books, column):
 
     metrics = Metrics()
     start = time.perf_counter()
-    algorithm.function(entries, metrics)      # the actual sorting
+    algorithm.function(entries, metrics, **options)      # the actual sorting
     time_ms = (time.perf_counter() - start) * 1000
 
     return SortResult(
