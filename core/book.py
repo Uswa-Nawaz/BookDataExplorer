@@ -21,6 +21,11 @@ class Book:
         These become the table columns in the UI later."""
         return [f.name for f in fields(Book)]
 
+    def numeric_column_names():
+        """Names of the numeric columns (year, pages, editions), found
+        from the type of each attribute."""
+        return [f.name for f in fields(Book) if f.type in (int, float)]
+
     def get(self, column):
         """Return this book's value for a column name.
         The sorting and searching code will use this to read any column."""

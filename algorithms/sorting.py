@@ -15,11 +15,13 @@ comparisons: every time two keys are compared with < or >.
 swaps:       every time an element is exchanged with another, or moved to a
              new position. Insertion sort counts each shift as one swap (this
              equals one adjacent swap). Merge sort counts each element it
-             copies back into the list while merging.
+             writes back while merging. Counting and radix sort count each
+             placement into the output list; bucket sort counts each
+             placement into a bucket and each write back.
 """
 import time
 from dataclasses import dataclass
-
+from core.book import Book
 from algorithms.metrics import Metrics, SortResult
 
 
@@ -254,6 +256,106 @@ def _sift_down(entries, root, size, metrics):
             return
 
 # ---------------------------------------------------------------------------
+# Non-comparison sorts (numeric columns only: year, pages, editions).
+# They sort by the VALUE of each key instead of comparing items with each
+# other. Their only key comparisons are the scan that finds the smallest and
+# largest key (and, for bucket sort, the insertion sort inside each bucket).
+# ---------------------------------------------------------------------------
+MAX_COUNTING_RANGE = 10_000_000   # largest key range counting sort will accept
+
+
+def _find_range(entries, metrics):
+    """Return (smallest key, largest key). Each item is compared with the
+    current smallest and largest, so each item costs 2 comparisons."""
+    low = high = entries[0][0]
+    for i in range(1, len(entries)):
+        key = entries[i][0]
+        metrics.comparisons += 2
+        if key < low:
+            low = key
+        if key > high:
+            high = key
+    return low, high
+
+
+def counting_sort(entries, metrics):
+    """Count how many items have each key value, turn the counts into final
+    positions, then place every item directly into its position."""
+    if not entries:
+        return
+    low, high = _find_range(entries, metrics)
+    size = high - low + 1                        # number of possible key values
+    if size > MAX_COUNTING_RANGE:
+        raise ValueError(f"Counting Sort: key range of {size:,} is too large")
+
+    counts = [0] * size
+    for entry in entries:                        # 1. count each key value
+        counts[entry[0] - low] += 1
+    for i in range(1, size):                     # 2. running totals: counts[i] becomes
+        counts[i] += counts[i - 1]               #    the number of items with key <= low + i
+
+    output = [None] * len(entries)
+    for entry in reversed(entries):              # 3. place items, starting from the END,
+        counts[entry[0] - low] -= 1              #    so equal items keep their order (stable)
+        output[counts[entry[0] - low]] = entry
+        metrics.swaps += 1
+    entries[:] = output                          # copy the result back into the list
+
+
+def radix_sort(entries, metrics):
+    """Sort by one decimal digit at a time, starting from the last digit
+    (least significant first). Each pass is a stable counting sort on that digit."""
+    if not entries:
+        return
+    low, high = _find_range(entries, metrics)
+    largest = high - low                         # keys are shifted so the smallest is 0
+    place = 1                                    # 1 = ones digit, 10 = tens digit, ...
+    while largest // place > 0:                  # one pass per digit of the largest key
+        _sort_by_digit(entries, low, place, metrics)
+        place *= 10
+
+
+def _sort_by_digit(entries, low, place, metrics):
+    """One radix pass: a stable counting sort on a single decimal digit."""
+    counts = [0] * 10                            # digits are 0..9
+    for entry in entries:
+        counts[((entry[0] - low) // place) % 10] += 1
+    for digit in range(1, 10):
+        counts[digit] += counts[digit - 1]
+
+    output = [None] * len(entries)
+    for entry in reversed(entries):              # from the end: keeps the pass stable
+        digit = ((entry[0] - low) // place) % 10
+        counts[digit] -= 1
+        output[counts[digit]] = entry
+        metrics.swaps += 1
+    entries[:] = output
+
+
+def bucket_sort(entries, metrics):
+    """Spread the items over buckets by key range, sort each bucket with
+    insertion sort, then join the buckets in order."""
+    if not entries:
+        return
+    low, high = _find_range(entries, metrics)
+    bucket_count = max(1, int(len(entries) ** 0.5))   # about sqrt(n) buckets
+    span = high - low + 1                             # number of possible key values
+
+    buckets = [[] for _ in range(bucket_count)]
+    for entry in entries:                             # 1. distribute into buckets
+        index = (entry[0] - low) * bucket_count // span
+        buckets[index].append(entry)                  # order inside a bucket = original order
+        metrics.swaps += 1
+
+    position = 0
+    for bucket in buckets:                            # 2. sort each bucket, then join
+        _insertion_sort_range(bucket, 0, len(bucket), metrics)
+        for entry in bucket:
+            entries[position] = entry
+            position += 1
+            metrics.swaps += 1
+
+# ---------------------------------------------------------------------------
 # Registry: one place that lists every algorithm and its properties
 # ---------------------------------------------------------------------------
 @dataclass
@@ -262,18 +364,29 @@ class SortAlgorithm:
     function: object    # the function that does the sorting
     complexity: str     # worst-case time complexity
     stable: bool        # does it keep equal items in their original order?
+    numeric_only: bool = False   # True if it only works on whole-number columns
 
 
 ALGORITHMS = {a.name: a for a in [
-    SortAlgorithm("Bubble Sort",       bubble_sort,       "O(n^2)",     stable=True),
-    SortAlgorithm("Selection Sort",    selection_sort,    "O(n^2)",     stable=False),
-    SortAlgorithm("Insertion Sort",    insertion_sort,    "O(n^2)",     stable=True),
-    SortAlgorithm("Merge Sort",        merge_sort,        "O(n log n)", stable=True),
-    SortAlgorithm("Quick Sort",        quick_sort,        "O(n^2)",     stable=False),
-    SortAlgorithm("Hybrid Merge Sort", hybrid_merge_sort, "O(n log n)", stable=True),
-    SortAlgorithm("Shell Sort",        shell_sort,        "O(n^2)",     stable=False),
-    SortAlgorithm("Heap Sort",         heap_sort,         "O(n log n)", stable=False),
+    SortAlgorithm("Bubble Sort",       bubble_sort,       "O(n^2)",      stable=True),
+    SortAlgorithm("Selection Sort",    selection_sort,    "O(n^2)",      stable=False),
+    SortAlgorithm("Insertion Sort",    insertion_sort,    "O(n^2)",      stable=True),
+    SortAlgorithm("Merge Sort",        merge_sort,        "O(n log n)",  stable=True),
+    SortAlgorithm("Quick Sort",        quick_sort,        "O(n^2)",      stable=False),
+    SortAlgorithm("Hybrid Merge Sort", hybrid_merge_sort, "O(n log n)",  stable=True),
+    SortAlgorithm("Shell Sort",        shell_sort,        "O(n^2)",      stable=False),
+    SortAlgorithm("Heap Sort",         heap_sort,         "O(n log n)",  stable=False),
+    SortAlgorithm("Counting Sort",     counting_sort,     "O(n + k)",    stable=True,  numeric_only=True),
+    SortAlgorithm("Radix Sort",        radix_sort,        "O(d(n + k))", stable=True,  numeric_only=True),
+    SortAlgorithm("Bucket Sort",       bucket_sort,       "O(n^2)",      stable=True,  numeric_only=True),
 ]}
+
+
+def is_available(algorithm_name, column):
+    """Can this algorithm sort this column?
+    Counting, radix and bucket sort need a numeric column."""
+    return (not ALGORITHMS[algorithm_name].numeric_only
+            or column in Book.numeric_column_names())
 
 # ---------------------------------------------------------------------------
 # The function the rest of the app will call
@@ -285,6 +398,11 @@ def run_sort(algorithm_name, books, column, **options):
 
     # Build (key, book) entries; the caller's list is left untouched
     entries = [(make_key(book.get(column)), book) for book in books]
+
+        # Counting, radix and bucket sort need whole-number keys
+    if algorithm.numeric_only and not all(isinstance(key, int) for key, _ in entries):
+        raise ValueError(f"{algorithm.name} only works on numeric columns "
+                         "(year, pages, editions)")
 
     metrics = Metrics()
     start = time.perf_counter()

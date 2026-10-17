@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import (QComboBox, QGridLayout, QGroupBox, QHBoxLayout,
 
 from algorithms.sorting import ALGORITHMS
 from core.book import Book
+from algorithms.sorting import ALGORITHMS, is_available
 
 RESULT_FIELDS = ["Algorithm", "Time", "Comparisons", "Swaps",
                  "Complexity", "Stability"]
@@ -30,6 +31,8 @@ class SortPanel(QGroupBox):
 
         self.order_box = QComboBox()
         self.order_box.addItems(["Ascending", "Descending"])
+        # Grey out algorithms that cannot sort the selected column
+        self.column_box.currentIndexChanged.connect(self._update_available_algorithms)
 
         self.sort_button = QPushButton("Sort")
         self.reset_button = QPushButton("Reset order")
@@ -67,12 +70,25 @@ class SortPanel(QGroupBox):
         layout.addWidget(self.status_label)
         self.setLayout(layout)
 
+        self._update_available_algorithms()   # apply it for the starting column        
+
     # ---------- button handler ----------
     def _on_sort_clicked(self):
         self.sort_requested.emit(
             self.algorithm_box.currentText(),
             self.column_box.currentData(),             # e.g. "year"
             self.order_box.currentText() == "Descending")
+
+    def _update_available_algorithms(self):
+        """Enable only the algorithms that can sort the selected column."""
+        column = self.column_box.currentData()
+        model = self.algorithm_box.model()       # the dropdown's list of items
+        for index, name in enumerate(ALGORITHMS):
+            model.item(index).setEnabled(is_available(name, column))
+
+        # If the chosen algorithm just became unavailable, go back to the first one
+        if not is_available(self.algorithm_box.currentText(), column):
+            self.algorithm_box.setCurrentIndex(0)
 
     # ---------- called by the Books tab ----------
     def set_busy(self, busy):
