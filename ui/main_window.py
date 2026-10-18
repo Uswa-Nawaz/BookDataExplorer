@@ -10,10 +10,10 @@ from ui.books_tab import BooksTab
 from ui.scraper_tab import IDLE, ScraperTab
 
 TARGET_BOOKS = 15000
-
-# Absolute path to  book_data_explorer/data/books.csv
+# Absolute paths inside  book_data_explorer/data/
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CSV_PATH = os.path.join(BASE_DIR, "data", "books.csv")
+CSV_PATH = os.path.join(BASE_DIR, "data", "books.csv")                  # complete data
+PARTIAL_CSV_PATH = os.path.join(BASE_DIR, "data", "books_partial.csv")  # unfinished scrape
 
 
 class MainWindow(QMainWindow):
@@ -22,7 +22,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Book Data Explorer")
         self.resize(1100, 780)
 
-        self.dataset = Dataset()     # all books are stored here
+        self.dataset = Dataset()     # the complete data shown in the Books tab
+        self._scraped = Dataset()    # the books of the current / last scrape
         self._thread = None          # the current scraper thread (if any)
 
         self.tabs = QTabWidget()
@@ -44,7 +45,7 @@ class MainWindow(QMainWindow):
 
     # ---------- loading saved data ----------
     def _load_saved_books(self):
-        """At startup, load the CSV from the last scrape (if it exists)."""
+        """At startup, load the CSV from the last complete scrape (if it exists)."""
         if os.path.exists(CSV_PATH):
             self.dataset.load_csv(CSV_PATH)
             self.books_tab.show_books(self.dataset.get_all())
@@ -55,10 +56,12 @@ class MainWindow(QMainWindow):
         if self._thread is not None and self._thread.isRunning():
             self._thread.wait()
 
-        self.dataset.clear()
+        # The scraper fills a NEW dataset, so the books already loaded
+        # (and the Books tab) are not touched while it runs
+        self._scraped = Dataset()
         self.scraper_tab.set_progress(0)
 
-        self._thread = ScraperThread(self.dataset, OpenLibrarySource(),
+        self._thread = ScraperThread(self._scraped, OpenLibrarySource(),
                                      TARGET_BOOKS)
         self._thread.progress.connect(self.scraper_tab.set_progress)
         self._thread.scraping_finished.connect(self._on_scraping_finished)
@@ -79,15 +82,27 @@ class MainWindow(QMainWindow):
             return
 
         self.scraper_tab.set_state(IDLE)
-        count = len(self.dataset)
-        if count > 0:
-            self.dataset.save_csv(CSV_PATH)    # keep whatever was scraped
-            self.books_tab.show_books(self.dataset.get_all())   # refresh table
+        count = len(self._scraped)
+
+        if count >= TARGET_BOOKS:
+            # A complete scrape replaces the main data file and the table
+            self._scraped.save_csv(CSV_PATH)
+            self.dataset = self._scraped
+            self.books_tab.show_books(self.dataset.get_all())
             message += f". {count} books saved to data/books.csv"
+        elif count > 0:
+            # An unfinished scrape must NOT overwrite the complete data file
+            self._scraped.save_csv(PARTIAL_CSV_PATH)
+            message += f". Only {count} books: saved to data/books_partial.csv"
+            if len(self.dataset) == 0:         # nothing loaded yet, so show these
+                self.dataset = self._scraped
+                self.books_tab.show_books(self.dataset.get_all())
+            else:
+                message += " (data/books.csv was kept)"
         self.scraper_tab.show_message(message)
 
     def closeEvent(self, event):
-        """Stop the thread cleanly when the window is closed."""
+        """Stop the threads cleanly when the window is closed."""
         if self._thread is not None and self._thread.isRunning():
             self._thread.stop()
             self._thread.wait()
